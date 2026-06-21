@@ -1,0 +1,45 @@
+name: Infrastructure Security Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: pip install pandas openpyxl
+
+    - name: Run Security Analyzer
+      run: python analyze.py
+
+    - name: Install Snyk
+      run: npm install -g snyk
+
+    - name: Snyk - Scan for vulnerabilities
+      run: snyk test --file=requirements.txt --severity-threshold=medium || true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    - name: Terraform - Check Infrastructure
+      run: |
+        echo "=== Terraform Infrastructure Security Scan ==="
+        echo "Scanning main.tf for misconfigurations..."
+        grep -n "publicly_accessible = true" main.tf && echo "ALERT: Database publicly accessible!" || true
+        grep -n "public-read-write" main.tf && echo "ALERT: S3 bucket open to public!" || true
+        grep -n "encrypted = false" main.tf && echo "ALERT: VM disk not encrypted!" || true
+        grep -n "0.0.0.0/0" main.tf && echo "ALERT: All ports open to internet!" || true
+        grep -n "public" main.tf && echo "ALERT: Blob storage has public access!" || true
+        echo "Terraform scan complete."
